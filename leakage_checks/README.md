@@ -53,8 +53,10 @@ python scripts/run_loso_with_diagnostics.py --input data/raw/UNIFIED_RECONSTRUCT
 
 Use **Subject-level (LOSO, mean prob)** as the **primary** result.
 Sample-level is secondary (more optimistic due to repeated samples per subject).
+Links for the datasets used in the project:
+“Parkinson's Speech with Multiple Types of Sound Recordings - UCI Machine Learning Repository”  ; “Parkinson Dataset with replicated acoustic features - UCI Machine Learning Repository“ ; “Parkinson's Disease Classification - UCI Machine Learning Repository“
 
-## Reproducibility notes
+## Reproducibility notes 
 
 - Preprocessing is fit **only on training folds**
 - SMOTE (when enabled) is applied **only on training folds**
