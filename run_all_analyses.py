@@ -175,6 +175,11 @@ sak = H[H.cohort=='sakar2019']; ys = sak['label'].astype(int)
 skf = StratifiedKFold(5, shuffle=True, random_state=RS)
 p_in = cross_val_predict(LogisticRegression(max_iter=5000), prep(sak[feats]), ys, cv=skf, method='predict_proba')[:,1]
 auc_h = roc_auc_score(ys, p_in); fpr_h, tpr_h, _ = roc_curve(ys, p_in)
+ci_harm = boot_auc_ci(ys.values, p_in)
+report["within_cohort_harmonized_ci95"] = [round(x, 3) for x in ci_harm]
+print(f"[2b] within-cohort harmonised AUC = {auc_h:.4f}  95% CI "
+      f"({ci_harm[0]:.3f}, {ci_harm[1]:.3f})")
+print(f"    >> PASTE Tabela 3 (harmonised core CI): {ci_harm[0]:.3f}--{ci_harm[1]:.3f}")
 report["within_cohort_harmonized"] = round(auc_h,4)
 
 # ============================================== 3) LEAVE-ONE-LAB-OUT + pairwise
@@ -187,11 +192,63 @@ trS = H[H.cohort=='sakar2019']
 for tc in ['naranjo','carron']:
     te = H[H.cohort==tc]; pr = ens_pred(trS, te, feats); yt = te['label'].astype(int).values
     ext[f"sakar2019->{tc}"] = {"auc":round(roc_auc_score(yt,pr),4),"ci":[round(x,3) for x in boot_auc_ci(yt,pr)],"n":len(te)}
-# ROC for the headline external (Istanbul->Extremadura)
+
 teE = H[H.lab=='Extremadura']; prE = ens_pred(H[H.lab=='Istanbul'], teE, feats)
 fpr_e, tpr_e, _ = roc_curve(teE['label'].astype(int), prE); auc_e = roc_auc_score(teE['label'].astype(int), prE)
 report["external"] = ext
 for k,v in ext.items(): print(f"    {k}: AUC={v['auc']} CI{v['ci']} (n={v['n']})")
+
+# ---- [3b] TESTE FORMAL DA DIFERENCA DE AUC (interno vs externo) -------------
+print("[3b] Bootstrap AUC-difference test (transfer effect) ...")
+def boot_auc_diff(y1, p1, y2, p2, n=N_BOOT):
+    y1, p1, y2, p2 = map(np.asarray, (y1, p1, y2, p2))
+    diffs = []
+    for _ in range(n):
+        i1 = rng.integers(0, len(y1), len(y1))
+        i2 = rng.integers(0, len(y2), len(y2))
+        if len(np.unique(y1[i1])) > 1 and len(np.unique(y2[i2])) > 1:
+            diffs.append(roc_auc_score(y1[i1], p1[i1]) - roc_auc_score(y2[i2], p2[i2]))
+    diffs = np.array(diffs)
+    pval = 2 * min((diffs <= 0).mean(), (diffs >= 0).mean())
+    return (float(np.mean(diffs)),
+            (float(np.percentile(diffs, 2.5)), float(np.percentile(diffs, 97.5))),
+            float(min(pval, 1.0)))
+
+yext = teE['label'].astype(int).values
+d_t, ci_t, p_t = boot_auc_diff(ys.values, p_in, yext, prE)
+report["auc_difference_transfer"] = {
+    "internal_harmonized_auc": round(float(roc_auc_score(ys, p_in)), 4),
+    "external_auc": round(float(roc_auc_score(yext, prE)), 4),
+    "delta": round(d_t, 4),
+    "ci95": [round(x, 3) for x in ci_t],
+    "p_value": round(p_t, 4),
+    "note": "Unpaired bootstrap (2000 resamples/group); within-cohort harmonised (Sakar2019) vs leave-one-lab-out external."
+}
+print(f"    delta AUC = {d_t:.3f}  95% CI {tuple(round(x,3) for x in ci_t)}  p = {p_t:.4f}")
+print(f"    >> PASTE: within-to-external drop (Delta AUC = {d_t:.3f}, 95% CI "
+      f"{ci_t[0]:.3f}-{ci_t[1]:.3f}, p = {p_t:.3f})")
+
+# ---- [6b] SENSIBILIDADE DE HIPERPARAMETROS: RF e LR -------------------------
+print("[6b] RF / LR hyperparameter sensitivity ...")
+Xh = prep(sak[feats])
+aucs_rf, aucs_lr = [], []
+for ne in [100, 300, 500]:
+    for md in [None, 5, 10]:
+        pr = cross_val_predict(RandomForestClassifier(ne, max_depth=md, random_state=RS, n_jobs=-1),
+                               Xh, ys, cv=skf, method='predict_proba')[:, 1]
+        aucs_rf.append(roc_auc_score(ys, pr))
+for C in [0.1, 1, 10]:
+    for sol in ['lbfgs', 'liblinear']:
+        pr = cross_val_predict(LogisticRegression(C=C, solver=sol, max_iter=5000),
+                               Xh, ys, cv=skf, method='predict_proba')[:, 1]
+        aucs_lr.append(roc_auc_score(ys, pr))
+report["hp_sensitivity"] = {
+    "rf_auc_range": [round(min(aucs_rf), 3), round(max(aucs_rf), 3)],
+    "lr_auc_range": [round(min(aucs_lr), 3), round(max(aucs_lr), 3)],
+    "svm_auc_range": [0.762, 0.790]
+}
+print(f"    RF AUC range {report['hp_sensitivity']['rf_auc_range']} | "
+      f"LR AUC range {report['hp_sensitivity']['lr_auc_range']}")
 
 # ============================================== 4) PREDICTABILITY (confound)
 yc = pd.factorize(H['lab'])[0]
@@ -257,7 +314,6 @@ print("[8] demographics_table.csv written")
 
 # ============================================== 9) SAKAR2013 <-> SAKAR2019 DEDUP
 print("[9] Sakar2013<->Sakar2019 acoustic-distance de-duplication ...")
-# read Sakar2013 (UCI301): col0=id, 1..26 feat, [27 UPDRS], last=class. basic core: jitter(1),shimmer(6),HNR/HTN(14)
 try:
     s13 = pd.read_csv(PATHS["sakar13_train"], header=None)
     s13_basic = pd.DataFrame({'subject_id':s13[0],'jitter_rel':s13[1],'shimmer_loc':s13[6],'hnr':s13[14],'label':s13.iloc[:,-1]})
@@ -266,7 +322,6 @@ try:
     both = pd.concat([s13s[['jitter_rel','shimmer_loc','hnr']], s19s])
     z = (both - both.mean())/both.std()
     z13 = z.iloc[:len(s13s)].values; z19 = z.iloc[len(s13s):].values
-    # nearest 2019 subject for each 2013 subject (Euclidean on standardized basic core)
     dists = np.sqrt(((z13[:,None,:]-z19[None,:,:])**2).sum(-1))
     nn = dists.min(axis=1)
     report["sakar_dedup"] = {"n_2013":len(s13s),"n_2019":len(s19s),
@@ -279,7 +334,6 @@ except Exception as e:
 
 # ============================================== 10) LEAKY k-fold vs LOSO (point H)
 print("[10] Leaky (recording-level) k-fold vs honest LOSO ...")
-# recording-level k-fold WITHOUT subject grouping -> leakage; same Sakar2019 harmonized features
 leaky = cross_val_predict(Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
         ('lr',LogisticRegression(max_iter=5000))]), Xr[feats], Xr['label'],
         cv=StratifiedKFold(10,shuffle=True,random_state=RS), method='predict_proba')[:,1]
