@@ -1,0 +1,115 @@
+{
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.14.0",
+    "sklearn": "1.8.0",
+    "imblearn": "0.14.1",
+    "numpy": "2.4.2",
+    "pandas": "3.0.1",
+    "cpu": 16,
+    "seed": 42
+  },
+  "within_cohort_798feat": {
+    "auc": 0.8745,
+    "auc_ci95": [
+      0.832,
+      0.911
+    ],
+    "sensitivity": 0.8377,
+    "sens_ci95": [
+      0.784,
+      0.88
+    ],
+    "specificity": 0.6923,
+    "spec_ci95": [
+      0.598,
+      0.773
+    ],
+    "cm_tn_fp_fn_tp": [
+      72,
+      32,
+      37,
+      191
+    ]
+  },
+  "within_cohort_harmonized": 0.7808,
+  "external": {
+    "Istanbul->Extremadura": {
+      "auc": 0.65,
+      "ci": [
+        0.555,
+        0.738
+      ],
+      "n": 140
+    },
+    "Extremadura->Istanbul": {
+      "auc": 0.6385,
+      "ci": [
+        0.556,
+        0.717
+      ],
+      "n": 252
+    },
+    "sakar2019->naranjo": {
+      "auc": 0.6469,
+      "ci": [
+        0.528,
+        0.762
+      ],
+      "n": 80
+    },
+    "sakar2019->carron": {
+      "auc": 0.6644,
+      "ci": [
+        0.512,
+        0.799
+      ],
+      "n": 60
+    }
+  },
+  "lab_predictability": {
+    "acc": 1.0,
+    "chance": 0.6429
+  },
+  "label_permutation": {
+    "observed_harmonized_auc": 0.7808,
+    "null_mean": 0.5024,
+    "p_value": 0.005,
+    "n_perm": 200
+  },
+  "permutation_importance_top10": {
+    "mfcc2": 0.1094,
+    "mfcc7": 0.0619,
+    "jitter_rel": 0.0495,
+    "mfcc10": 0.0331,
+    "mfcc6": 0.0286,
+    "mfcc0": 0.0273,
+    "mfcc5": 0.0199,
+    "mfcc3": 0.0156,
+    "shimmer_loc": 0.0115,
+    "hnr": 0.0081
+  },
+  "aggregation": {
+    "prob_avg_auc": 0.8225,
+    "majority_vote_auc": 0.7358
+  },
+  "demographics_note": {
+    "carron_age_PD": 70.3,
+    "carron_age_HC": 66.9,
+    "carron_age_ttest_p": 0.1532
+  },
+  "sakar_dedup": {
+    "n_2013": 40,
+    "n_2019": 252,
+    "min_nn_distance": 2.138,
+    "median_nn_distance": 3.619,
+    "n_suspicious_pairs(<0.25)": 0,
+    "note": "Basic 3-feature core only; small distances are suggestive, not proof. Sakar2013 is excluded from main analysis (sensitivity)."
+  },
+  "leakage_demo": {
+    "leaky_recordlevel_kfold_auc": 0.8092,
+    "honest_subjectlevel_harmonized_auc": 0.7808,
+    "inflation": 0.0284
+  },
+  "runtime_seconds": 182.1
+}
