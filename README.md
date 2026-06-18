@@ -39,6 +39,7 @@ Outputs are written to `./outputs/`.
 ## Reproducibility
 
 * Fixed random seed: 42
+* Commit used to produce the reported results: `f7c00e5f0138dc6c80d9e5802d5b58957c0b0764`
 * Environment used for the reported results: Python 3.14, scikit-learn 1.8.0, imbalanced-learn 0.14.1, NumPy 2.4.2, pandas 3.0.1 (16-core workstation, ~3 min runtime).
 * Headline numbers: within-cohort LOSO AUC = 0.875 (95% CI 0.832-0.911); leave-one-laboratory-out AUC = 0.650 (95% CI 0.555-0.738); laboratory predictability = 100% (chance 64%); label-permutation null AUC = 0.502 (p = 0.005).
 
