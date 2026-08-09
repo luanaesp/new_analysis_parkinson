@@ -1,3 +1,22 @@
+> ## ⚠️ SUPERSEDED — DO NOT CITE THESE NUMBERS
+>
+> This folder is an **earlier, exploratory pipeline** that is **not** the one reported in the
+> manuscript. It uses a different model (multi-view ensembling over Original + PCA + optional
+> LDA views) and therefore produces **different predictions** from the pipeline of record.
+>
+> Concretely, `confusion_matrix_subject_loso.png` in this folder reports
+> TN=73, FP=31, FN=26, TP=202 (sensitivity 88.60%, specificity 70.19%), whereas the
+> manuscript's subject-level LOSO result is
+> TN=72, FP=32, FN=37, TP=191 (sensitivity 83.77%, specificity 69.23%).
+> Both describe the same 332 subjects (104 HC / 228 PD); the difference is the model, not the data.
+>
+> `confusion_matrix_sample_loso.png` (TN=217, FP=95, FN=95, TP=589, N=996) is a
+> **recording-level** result and is not comparable to any subject-level number in the paper.
+>
+> **The pipeline of record is [`../run_all_analyses.py`](../run_all_analyses.py)**, whose outputs
+> live in [`../outputs/`](../outputs/) and match the manuscript exactly. This folder is retained
+> only for provenance of the initial leakage investigation.
+
 # PD Speech Classification (LOSO by subject) + Leak/Confounding Diagnostics
 
 This repository runs a **Leave-One-Subject-Out (LOSO)** evaluation for PD speech classification,

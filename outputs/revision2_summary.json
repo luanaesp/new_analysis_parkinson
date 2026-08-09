@@ -1,0 +1,257 @@
+{
+  "imputation_audit": {
+    "harmonised_core_missing_cells": 0,
+    "harmonised_core_cells_total": 7448,
+    "native_798_missing_cells": 214740,
+    "native_798_cells_total": 794808,
+    "native_798_missing_fraction": 0.2702,
+    "structural_cross_cohort_block_cells": 214740,
+    "sporadic_within_cohort_missing_cells": 0,
+    "imputer_strategy": "median, fitted on the training fold only, computed over all training subjects jointly (NOT conditioned on the class label)",
+    "note": "The harmonised core used for every external-validation result contains zero missing values, so the imputer is a no-op there. In the 798-feature native analysis all missingness is structural: features exist in one cohort and not the other. No value is ever imputed from class-conditional statistics.",
+    "external_auc_with_imputer": 0.65,
+    "external_auc_imputer_removed": 0.65,
+    "identical": true
+  },
+  "cohort_prevalence_baseline": {
+    "auc_from_cohort_membership_alone": 0.6046,
+    "prevalence_by_cohort": {
+      "pd_speech": {
+        "n": 252,
+        "pd_rate": 0.746
+      },
+      "replicated": {
+        "n": 80,
+        "pd_rate": 0.5
+      }
+    },
+    "note": "The pooled 798-feature LOSO mixes two cohorts with different PD prevalence. A classifier with no acoustic information at all, told only which cohort a subject came from, already achieves this AUC. Reported pooled AUC must be read against this floor, not against 0.5."
+  },
+  "per_cohort_native_loso": {
+    "sakar2019": {
+      "auc": 0.8556,
+      "ci95": [
+        0.801,
+        0.903
+      ],
+      "n_subjects": 252,
+      "n_features": 753,
+      "pd_rate": 0.746,
+      "imputed_values": 0
+    },
+    "naranjo": {
+      "auc": 0.8931,
+      "ci95": [
+        0.802,
+        0.96
+      ],
+      "n_subjects": 80,
+      "n_features": 45,
+      "pd_rate": 0.5,
+      "imputed_values": 0
+    },
+    "note": "Each cohort analysed with only its own native features, so no cross-cohort imputation occurs and no cohort-prevalence contrast can contribute. These are the cleanest within-cohort estimates in the study."
+  },
+  "preprocessing_placement_audit": {
+    "scaler_fitted_on_full_dataset_auc": 0.7808,
+    "scaler_fitted_inside_cv_folds_auc": 0.7793,
+    "difference": 0.0015,
+    "note": "Standardisation fitted once on the full cohort versus refitted inside every CV fold. The imputer is a no-op here (zero missing values), so this isolates the effect of scaler placement alone."
+  },
+  "sex_stratified": {
+    "sex_0": {
+      "n": 122,
+      "n_pd": 81,
+      "pd_rate": 0.6639,
+      "auc": 0.7998,
+      "ci95": [
+        0.711,
+        0.872
+      ]
+    },
+    "sex_1": {
+      "n": 130,
+      "n_pd": 107,
+      "pd_rate": 0.8231,
+      "auc": 0.7107,
+      "ci95": [
+        0.59,
+        0.818
+      ]
+    },
+    "difference": {
+      "delta_auc": 0.0867,
+      "ci95": [
+        -0.042,
+        0.22
+      ],
+      "p_value": 0.204
+    },
+    "auc_from_sex_alone": 0.6049,
+    "note": "Sex-stratified discrimination on the within-cohort harmonised core (Sakar2019, the only cohort large enough to stratify). Overlapping intervals indicate the model is not simply exploiting the differing PD prevalence between sexes."
+  },
+  "sex_distribution_by_cohort": {
+    "sakar2019": {
+      "sex_0": {
+        "HC": 41,
+        "PD": 81,
+        "pd_rate": 0.6639
+      },
+      "sex_1": {
+        "HC": 23,
+        "PD": 107,
+        "pd_rate": 0.8231
+      }
+    },
+    "naranjo": {
+      "sex_0": {
+        "HC": 22,
+        "PD": 26,
+        "pd_rate": 0.5417
+      },
+      "sex_1": {
+        "HC": 18,
+        "PD": 14,
+        "pd_rate": 0.4375
+      }
+    },
+    "carron": {
+      "sex_0": {
+        "HC": 26,
+        "PD": 24,
+        "pd_rate": 0.48
+      },
+      "sex_1": {
+        "HC": 4,
+        "PD": 6,
+        "pd_rate": 0.6
+      }
+    }
+  },
+  "importance_vs_batch": {
+    "table": [
+      {
+        "feature": "jitter_rel",
+        "auc_pd_within_sakar2019": 0.7242,
+        "auc_lab_discrimination": 1.0
+      },
+      {
+        "feature": "mfcc0",
+        "auc_pd_within_sakar2019": 0.6411,
+        "auc_lab_discrimination": 1.0
+      },
+      {
+        "feature": "mfcc1",
+        "auc_pd_within_sakar2019": 0.5495,
+        "auc_lab_discrimination": 0.9563
+      },
+      {
+        "feature": "rpde",
+        "auc_pd_within_sakar2019": 0.6682,
+        "auc_lab_discrimination": 0.9435
+      },
+      {
+        "feature": "ppe",
+        "auc_pd_within_sakar2019": 0.5918,
+        "auc_lab_discrimination": 0.8624
+      },
+      {
+        "feature": "mfcc9",
+        "auc_pd_within_sakar2019": 0.5736,
+        "auc_lab_discrimination": 0.8516
+      },
+      {
+        "feature": "mfcc8",
+        "auc_pd_within_sakar2019": 0.5687,
+        "auc_lab_discrimination": 0.8451
+      },
+      {
+        "feature": "mfcc10",
+        "auc_pd_within_sakar2019": 0.5141,
+        "auc_lab_discrimination": 0.8188
+      },
+      {
+        "feature": "gne",
+        "auc_pd_within_sakar2019": 0.6107,
+        "auc_lab_discrimination": 0.805
+      },
+      {
+        "feature": "mfcc12",
+        "auc_pd_within_sakar2019": 0.5311,
+        "auc_lab_discrimination": 0.8009
+      },
+      {
+        "feature": "mfcc7",
+        "auc_pd_within_sakar2019": 0.5801,
+        "auc_lab_discrimination": 0.753
+      },
+      {
+        "feature": "mfcc11",
+        "auc_pd_within_sakar2019": 0.5447,
+        "auc_lab_discrimination": 0.719
+      },
+      {
+        "feature": "hnr",
+        "auc_pd_within_sakar2019": 0.666,
+        "auc_lab_discrimination": 0.6608
+      },
+      {
+        "feature": "mfcc6",
+        "auc_pd_within_sakar2019": 0.5742,
+        "auc_lab_discrimination": 0.6174
+      },
+      {
+        "feature": "mfcc4",
+        "auc_pd_within_sakar2019": 0.5854,
+        "auc_lab_discrimination": 0.6025
+      },
+      {
+        "feature": "mfcc5",
+        "auc_pd_within_sakar2019": 0.617,
+        "auc_lab_discrimination": 0.5973
+      },
+      {
+        "feature": "shimmer_loc",
+        "auc_pd_within_sakar2019": 0.6631,
+        "auc_lab_discrimination": 0.5559
+      },
+      {
+        "feature": "mfcc2",
+        "auc_pd_within_sakar2019": 0.7529,
+        "auc_lab_discrimination": 0.5285
+      },
+      {
+        "feature": "mfcc3",
+        "auc_pd_within_sakar2019": 0.6568,
+        "auc_lab_discrimination": 0.5114
+      }
+    ],
+    "n_features_lab_auc_above_0.90": 4,
+    "n_features_lab_auc_above_0.80": 10,
+    "median_lab_auc": 0.8009,
+    "median_pd_auc": 0.5918,
+    "spearman_r_pd_vs_lab": -0.1659,
+    "note": "For every harmonised feature: univariate AUC for separating PD from HC within one cohort, against univariate AUC for separating the two laboratories. A feature that is highly informative on the second axis cannot be interpreted as a clinical biomarker without qualification."
+  },
+  "minimal_core_2013_check": {
+    "features": [
+      "jitter_rel",
+      "shimmer_loc",
+      "hnr"
+    ],
+    "n_2013_subjects_added": 40,
+    "external_auc_2013_excluded": 0.5205,
+    "ci95_excluded": [
+      0.43,
+      0.615
+    ],
+    "external_auc_2013_included": 0.5006,
+    "ci95_included": [
+      0.402,
+      0.595
+    ],
+    "delta": -0.0199,
+    "note": "Leave-one-laboratory-out transfer on the three features shared by all four cohorts, with and without the 2013 Istanbul cohort in the training set. This is the robustness check the manuscript promised."
+  },
+  "runtime_seconds": 144.5
+}
