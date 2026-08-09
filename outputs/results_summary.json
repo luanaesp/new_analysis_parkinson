@@ -32,48 +32,78 @@
       191
     ]
   },
-  "within_cohort_harmonized": 0.7808,
+  "within_cohort_harmonized_ci95": [
+    0.716,
+    0.84
+  ],
+  "within_cohort_harmonized": 0.7793,
   "external": {
     "Istanbul->Extremadura": {
       "auc": 0.65,
       "ci": [
-        0.555,
-        0.738
+        0.554,
+        0.739
       ],
       "n": 140
     },
     "Extremadura->Istanbul": {
       "auc": 0.6385,
       "ci": [
-        0.556,
-        0.717
+        0.557,
+        0.721
       ],
       "n": 252
     },
     "sakar2019->naranjo": {
       "auc": 0.6469,
       "ci": [
-        0.528,
-        0.762
+        0.522,
+        0.765
       ],
       "n": 80
     },
     "sakar2019->carron": {
       "auc": 0.6644,
       "ci": [
-        0.512,
-        0.799
+        0.521,
+        0.803
       ],
       "n": 60
     }
+  },
+  "auc_difference_transfer": {
+    "internal_harmonized_auc": 0.7793,
+    "external_auc": 0.65,
+    "delta_bootstrap_mean": 0.1308,
+    "delta_point": 0.1293,
+    "ci95": [
+      0.022,
+      0.241
+    ],
+    "p_value": 0.023,
+    "note": "Unpaired bootstrap (2000 resamples/group); within-cohort harmonised (Sakar2019) vs leave-one-lab-out external. delta_bootstrap_mean is the mean of the bootstrap differences; delta_point is the plain difference of the two point estimates."
+  },
+  "hp_sensitivity": {
+    "rf_auc_range": [
+      0.796,
+      0.803
+    ],
+    "lr_auc_range": [
+      0.775,
+      0.79
+    ],
+    "svm_auc_range": [
+      0.682,
+      0.788
+    ]
   },
   "lab_predictability": {
     "acc": 1.0,
     "chance": 0.6429
   },
   "label_permutation": {
-    "observed_harmonized_auc": 0.7808,
-    "null_mean": 0.5024,
+    "observed_harmonized_auc": 0.7793,
+    "null_mean": 0.5025,
     "p_value": 0.005,
     "n_perm": 200
   },
@@ -108,8 +138,8 @@
   },
   "leakage_demo": {
     "leaky_recordlevel_kfold_auc": 0.8092,
-    "honest_subjectlevel_harmonized_auc": 0.7808,
-    "inflation": 0.0284
+    "honest_subjectlevel_harmonized_auc": 0.7793,
+    "inflation": 0.0299
   },
-  "runtime_seconds": 182.1
+  "runtime_seconds": 271.5
 }

@@ -23,10 +23,11 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import VarianceThreshold
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.inspection import permutation_importance
 from sklearn.metrics import roc_auc_score
 from imblearn.over_sampling import SMOTE
 from joblib import Parallel, delayed
@@ -467,99 +468,124 @@ print(f"    PC1={evr[0]:.1%} PC2={evr[1]:.1%} (sum {evr[:2].sum():.1%}) | "
       f"top loadings: {top_load} | MFCC in top6: {n_mfcc_top}")
 
 # ==================================================================== FIGURES
+# Nature style: no in-figure titles (captions carry them). PNG + vector PDF emitted.
 CLR = {'pd':'#1b3a6b','lab':'#c0392b','gray':'#7f8c8d','ok':'#2e86c1'}
+def saveboth(name):
+    plt.savefig(f"{OUT}/{name}.png", dpi=200); plt.savefig(f"{OUT}/{name}.pdf"); plt.close()
 
-# figR5 / figR6: discrete-colour embeddings, marker shape = laboratory family
+# permutation importance recomputed here (identical seed/protocol to the main
+# pipeline) so the manuscript composite can pair it with the batch analysis
+Xtr_, Xte_, ytr_, yte_ = train_test_split(sak[feats], ys, test_size=.3, stratify=ys, random_state=RS)
+pipe_ = Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
+                  ('lr',LogisticRegression(max_iter=5000))]).fit(Xtr_, ytr_)
+pi_ = permutation_importance(pipe_, Xte_, yte_, n_repeats=30, random_state=RS, scoring='roc_auc')
+impS = pd.Series(pi_.importances_mean, index=feats).sort_values(ascending=False)
+
+def draw_importance(ax):
+    impS.head(10)[::-1].plot(kind='barh', color=CLR['ok'], ax=ax)
+    ax.set_xlabel('Mean AUC drop when permuted')
+
+# manual offsets for labels that otherwise collide
+LBL_OFF = {'mfcc8': (5,-9), 'mfcc9': (5,4), 'ppe': (5,6), 'gne': (5,-9), 'mfcc12': (5,-9)}
+def draw_scatter(ax):
+    above = fi.auc_lab_discrimination >= fi.auc_pd_within_sakar2019
+    ax.plot([0.45,1.02],[0.45,1.02], color=CLR['gray'], ls='--', lw=1.2, zorder=1)
+    ax.scatter(fi.loc[above,'auc_pd_within_sakar2019'], fi.loc[above,'auc_lab_discrimination'],
+               s=58, color=CLR['lab'], alpha=.85, edgecolor='white', linewidth=.9, zorder=3,
+               label='batch signal exceeds clinical signal')
+    ax.scatter(fi.loc[~above,'auc_pd_within_sakar2019'], fi.loc[~above,'auc_lab_discrimination'],
+               s=58, color=CLR['ok'], alpha=.85, edgecolor='white', linewidth=.9, zorder=3,
+               label='clinical signal exceeds batch signal')
+    for _, r in fi.iterrows():
+        off = LBL_OFF.get(r.feature, (5,3))
+        ax.annotate(r.feature, (r.auc_pd_within_sakar2019, r.auc_lab_discrimination),
+                    fontsize=7, xytext=off, textcoords='offset points', color='#333333')
+    ax.set_xlim(0.48, 0.80); ax.set_ylim(0.45, 1.04)
+    ax.set_xlabel('Univariate AUC: PD vs HC (within Sakar2019)')
+    ax.set_ylabel('Univariate AUC: Istanbul vs Extremadura')
+    ax.legend(fontsize=7, loc='lower right', framealpha=.92)
+
+GAP_ORDER = ["batch_driven_only (lab AUC > 0.90)", "all_19_features",
+             "batch_neutral_threshold (lab AUC < 0.70)", "batch_neutral_strict (lab AUC < PD AUC)"]
+GAP_SHORT = ["Batch-driven\nonly (4f)", "All harmonised\n(19f)",
+             "Batch-neutral,\nlenient (7f)", "Batch-neutral,\nstrict (5f)"]
+def draw_gap(ax):
+    wi = [subsets[k]["within_cohort_auc"] for k in GAP_ORDER]
+    ex = [subsets[k]["external_auc"] for k in GAP_ORDER]
+    xp = np.arange(len(GAP_ORDER)); w = 0.36
+    ax.bar(xp-w/2, wi, w, label='Within-cohort', color=CLR['pd'], alpha=.9)
+    ax.bar(xp+w/2, ex, w, label='Leave-one-lab-out', color=CLR['lab'], alpha=.9)
+    for i in range(len(GAP_ORDER)):
+        ax.text(xp[i]-w/2, wi[i]+.008, f'{wi[i]:.3f}', ha='center', fontsize=7.5)
+        ax.text(xp[i]+w/2, ex[i]+.008, f'{ex[i]:.3f}', ha='center', fontsize=7.5)
+        ax.annotate('', xy=(xp[i]+w/2, ex[i]), xytext=(xp[i]-w/2, wi[i]),
+                    arrowprops=dict(arrowstyle='->', color='#444444', lw=1.1, ls=':'))
+        ax.text(xp[i], (wi[i]+ex[i])/2, f'  −{wi[i]-ex[i]:.3f}', fontsize=7.5,
+                color='#444444', ha='left', va='center')
+    ax.set_xticks(xp); ax.set_xticklabels(GAP_SHORT, fontsize=7.5)
+    ax.axhline(0.5, color='k', ls=':'); ax.set_ylim(0.45, 0.9); ax.set_ylabel('AUC')
+    ax.legend(fontsize=7.5, loc='upper left', framealpha=.92)
+
+def draw_sex(ax):
+    ks = [k for k in sex_res if k.startswith('sex_') and sex_res[k].get('auc')]
+    vals = [sex_res[k]['auc'] for k in ks]
+    errs = [[sex_res[k]['auc']-sex_res[k]['ci95'][0] for k in ks],
+            [sex_res[k]['ci95'][1]-sex_res[k]['auc'] for k in ks]]
+    ax.bar([f"{k}\n(n={sex_res[k]['n']}, PD {sex_res[k]['pd_rate']:.0%})" for k in ks],
+           vals, color=[CLR['pd'], CLR['ok']], yerr=errs, capsize=6, alpha=.9)
+    ax.axhline(0.5, color='k', ls=':'); ax.set_ylim(0.4, 1.0); ax.set_ylabel('AUC')
+    for i, v in enumerate(vals): ax.text(i, v+0.012, f'{v:.3f}', ha='center', fontsize=9)
+
 CLS = {0: '#2e86c1', 1: '#c0392b'}          # HC / PD, two discrete colours
 MRK = {'Istanbul': 'o', 'Extremadura': '^'}
-for Z, nm, ttl, xl, yl in [
-    (Z_tsne, "figR5_tsne_discrete", 't-SNE of the harmonised acoustic core',
-     't-SNE dimension 1', 't-SNE dimension 2'),
-    (Z_pca, "figR6_pca_discrete", 'PCA of the harmonised acoustic core',
-     f'PC1 ({evr[0]:.1%} of variance)', f'PC2 ({evr[1]:.1%} of variance)')]:
-    plt.figure(figsize=(6.4,5.4))
+def draw_embed(ax, Z, xl, yl, legend=False):
     for lb, mk in MRK.items():
         for cl, cc in CLS.items():
             m = (lab_emb == lb) & (yemb == cl)
             if not m.any(): continue
-            plt.scatter(Z[m,0], Z[m,1], c=cc, marker=mk, s=34, alpha=.78,
-                        edgecolor='white', linewidth=.5,
-                        label=f"{'PD' if cl else 'HC'} — {lb}")
-    plt.xlabel(xl); plt.ylabel(yl)
-    plt.title(ttl, fontweight='bold', fontsize=11)
-    plt.legend(fontsize=7.5, framealpha=.92, loc='best')
-    plt.tight_layout(); plt.savefig(f"{OUT}/{nm}.png", dpi=200); plt.close()
+            ax.scatter(Z[m,0], Z[m,1], c=cc, marker=mk, s=30, alpha=.78,
+                       edgecolor='white', linewidth=.5,
+                       label=f"{'PD' if cl else 'HC'} — {lb}")
+    ax.set_xlabel(xl); ax.set_ylabel(yl)
+    if legend: ax.legend(fontsize=7, framealpha=.92, loc='best')
 
-# figR1: importance vs batch-effect scatter
-plt.figure(figsize=(6.8,5.8))
-above = fi.auc_lab_discrimination >= fi.auc_pd_within_sakar2019
-plt.plot([0.45,1.02],[0.45,1.02], color=CLR['gray'], ls='--', lw=1.2, zorder=1)
-plt.scatter(fi.loc[above,'auc_pd_within_sakar2019'], fi.loc[above,'auc_lab_discrimination'],
-            s=58, color=CLR['lab'], alpha=.85, edgecolor='white', linewidth=.9, zorder=3,
-            label='batch signal exceeds clinical signal')
-plt.scatter(fi.loc[~above,'auc_pd_within_sakar2019'], fi.loc[~above,'auc_lab_discrimination'],
-            s=58, color=CLR['ok'], alpha=.85, edgecolor='white', linewidth=.9, zorder=3,
-            label='clinical signal exceeds batch signal')
-for _, r in fi.iterrows():
-    plt.annotate(r.feature, (r.auc_pd_within_sakar2019, r.auc_lab_discrimination),
-                 fontsize=7, xytext=(5,3), textcoords='offset points', color='#333333')
-plt.xlim(0.48, 0.80); plt.ylim(0.45, 1.04)
-plt.xlabel('Univariate AUC: PD vs HC (within Sakar2019)')
-plt.ylabel('Univariate AUC: Istanbul vs Extremadura')
-plt.title('Clinical signal versus batch signal, per feature', fontweight='bold', fontsize=11)
-plt.text(.02,.98,'dashed line = equal discriminability;\npoints above it identify the laboratory\nmore reliably than they identify a patient',
-         transform=plt.gca().transAxes, fontsize=7.5, va='top', color='#555555')
-plt.legend(fontsize=7.5, loc='lower right', framealpha=.92)
-plt.tight_layout(); plt.savefig(f"{OUT}/figR1_importance_vs_batch.png", dpi=200); plt.close()
+def panel_letters(axs, letters):
+    for ax, letter in zip(axs, letters):
+        ax.text(-0.14, 1.04, letter, transform=ax.transAxes, fontweight='bold', fontsize=13)
 
-# figR2: sex-stratified AUC
-plt.figure(figsize=(5.4,4.4))
-ks = [k for k in sex_res if k.startswith('sex_') and sex_res[k].get('auc')]
-vals = [sex_res[k]['auc'] for k in ks]
-errs = [[sex_res[k]['auc']-sex_res[k]['ci95'][0] for k in ks],
-        [sex_res[k]['ci95'][1]-sex_res[k]['auc'] for k in ks]]
-plt.bar([f"{k}\n(n={sex_res[k]['n']}, PD {sex_res[k]['pd_rate']:.0%})" for k in ks],
-        vals, color=[CLR['pd'], CLR['ok']], yerr=errs, capsize=6, alpha=.9)
-plt.axhline(0.5, color='k', ls=':'); plt.ylim(0.4, 1.0); plt.ylabel('AUC')
-plt.title('Discrimination is comparable across sexes', fontweight='bold', fontsize=11)
-for i, v in enumerate(vals): plt.text(i, v+0.012, f'{v:.3f}', ha='center', fontsize=9)
-plt.tight_layout(); plt.savefig(f"{OUT}/figR2_sex_stratified_auc.png", dpi=200); plt.close()
-
-# figR3: what the pooled 798-feature AUC is measured against
+# --- standalone versions (repo continuity) ---
+plt.figure(figsize=(6.8,5.8)); draw_scatter(plt.gca()); plt.tight_layout(); saveboth("figR1_importance_vs_batch")
+plt.figure(figsize=(5.4,4.4)); draw_sex(plt.gca()); plt.tight_layout(); saveboth("figR2_sex_stratified_auc")
 plt.figure(figsize=(6.6,4.4))
 nm3 = ['Cohort membership\nalone (no acoustics)', 'Sakar2019 only\n(native, 0 imputed)',
        'Naranjo only\n(native, 0 imputed)']
 v3 = [auc_cohort_only, percohort['sakar2019']['auc'], percohort['naranjo']['auc']]
 plt.bar(nm3, v3, color=[CLR['gray'], CLR['pd'], CLR['ok']], alpha=.9)
 plt.axhline(0.5, color='k', ls=':'); plt.ylim(0.45, 1.0); plt.ylabel('AUC')
-plt.title('Pooled within-cohort performance, decomposed', fontweight='bold', fontsize=11)
 for i, v in enumerate(v3): plt.text(i, v+0.01, f'{v:.3f}', ha='center', fontsize=9)
-plt.tight_layout(); plt.savefig(f"{OUT}/figR3_pooled_decomposition.png", dpi=200); plt.close()
+plt.tight_layout(); saveboth("figR3_pooled_decomposition")
+plt.figure(figsize=(7.6,4.8)); draw_gap(plt.gca()); plt.tight_layout(); saveboth("figR4_generalisation_gap")
+plt.figure(figsize=(6.4,5.4))
+draw_embed(plt.gca(), Z_tsne, 't-SNE dimension 1', 't-SNE dimension 2', legend=True)
+plt.tight_layout(); saveboth("figR5_tsne_discrete")
+plt.figure(figsize=(6.4,5.4))
+draw_embed(plt.gca(), Z_pca, f'PC1 ({evr[0]:.1%} of variance)', f'PC2 ({evr[1]:.1%} of variance)', legend=True)
+plt.tight_layout(); saveboth("figR6_pca_discrete")
 
-# figR4: the generalisation gap tracks batch contamination
-order = ["batch_driven_only (lab AUC > 0.90)", "all_19_features",
-         "batch_neutral_threshold (lab AUC < 0.70)", "batch_neutral_strict (lab AUC < PD AUC)"]
-short = ["Batch-driven only\n(4 features)", "All harmonised\n(19 features)",
-         "Batch-neutral, lenient\n(7 features)", "Batch-neutral, strict\n(5 features)"]
-wi = [subsets[k]["within_cohort_auc"] for k in order]
-ex = [subsets[k]["external_auc"] for k in order]
-xp = np.arange(len(order)); w = 0.36
-plt.figure(figsize=(7.6,4.8))
-plt.bar(xp-w/2, wi, w, label='Within-cohort', color=CLR['pd'], alpha=.9)
-plt.bar(xp+w/2, ex, w, label='Leave-one-laboratory-out', color=CLR['lab'], alpha=.9)
-for i in range(len(order)):
-    plt.text(xp[i]-w/2, wi[i]+.008, f'{wi[i]:.3f}', ha='center', fontsize=8)
-    plt.text(xp[i]+w/2, ex[i]+.008, f'{ex[i]:.3f}', ha='center', fontsize=8)
-    plt.annotate('', xy=(xp[i]+w/2, ex[i]), xytext=(xp[i]-w/2, wi[i]),
-                 arrowprops=dict(arrowstyle='->', color='#444444', lw=1.1, ls=':'))
-    plt.text(xp[i], (wi[i]+ex[i])/2, f'  −{wi[i]-ex[i]:.3f}', fontsize=8,
-             color='#444444', ha='left', va='center')
-plt.xticks(xp, short, fontsize=8.5)
-plt.axhline(0.5, color='k', ls=':'); plt.ylim(0.45, 0.88); plt.ylabel('AUC')
-plt.title('The generalisation gap widens with batch contamination',
-          fontweight='bold', fontsize=11)
-plt.legend(fontsize=8.5, loc='lower left')
-plt.tight_layout(); plt.savefig(f"{OUT}/figR4_generalisation_gap.png", dpi=200); plt.close()
+# --- manuscript composites ---
+fig, axs = plt.subplots(1, 3, figsize=(15.6, 4.9))
+draw_importance(axs[0]); draw_scatter(axs[1]); draw_gap(axs[2])
+panel_letters(axs, ['a','b','c'])
+plt.tight_layout(); saveboth("figM2_importance_batch")
+
+fig, ax = plt.subplots(figsize=(5.2,4.3)); draw_sex(ax)
+plt.tight_layout(); saveboth("figM3_sex")
+
+fig, axs = plt.subplots(1, 2, figsize=(11.2, 4.9))
+draw_embed(axs[0], Z_tsne, 't-SNE dimension 1', 't-SNE dimension 2', legend=True)
+draw_embed(axs[1], Z_pca, f'PC1 ({evr[0]:.1%} of variance)', f'PC2 ({evr[1]:.1%} of variance)')
+panel_letters(axs, ['a','b'])
+plt.tight_layout(); saveboth("figM4_embeddings")
 
 rep["runtime_seconds"] = round(time.time()-t0, 1)
 json.dump(rep, open(f"{OUT}/revision2_summary.json","w"), indent=2)

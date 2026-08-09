@@ -80,7 +80,15 @@ Outputs are written to `./outputs/`.
   (the first-round results were produced at `f7c00e5f0138dc6c80d9e5802d5b58957c0b0764`; the
   headline numbers below are unchanged between the two)
 * Environment used for the reported results: Python 3.14, scikit-learn 1.8.0, imbalanced-learn 0.14.1, NumPy 2.4.2, pandas 3.0.1 (16-core workstation, ~3 min runtime).
-* Headline numbers: within-cohort LOSO AUC = 0.875 (95% CI 0.832-0.911); leave-one-laboratory-out AUC = 0.650 (95% CI 0.555-0.738); laboratory predictability = 100% (chance 64%); label-permutation null AUC = 0.502 (p = 0.005).
+* Headline numbers: within-cohort LOSO AUC = 0.874 (exact 0.87449; 95% CI 0.832-0.911);
+  leave-one-laboratory-out AUC = 0.650 (95% CI 0.555-0.738); laboratory predictability = 100%
+  (chance 64%); within-cohort harmonised AUC = 0.779 (fold-internal preprocessing);
+  label-permutation null AUC = 0.503 (p = 0.005).
+* Note on 0.874 vs 0.875: earlier reports quoted 0.875, a double-rounding artefact
+  (0.87449 -> 0.8745 -> 0.875). The single-step 3-dp value is 0.874.
+* Note on 0.779 vs 0.781: the harmonised within-cohort AUC was previously computed with the
+  scaler fitted on the full cohort (0.781). The pipeline now refits imputer and scaler inside
+  every CV fold, which is the leakage-free protocol the paper advocates (0.779).
 
 ## License
 

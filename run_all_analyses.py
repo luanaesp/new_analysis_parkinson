@@ -59,6 +59,12 @@ PATHS = {
 OUT = "outputs"; os.makedirs(OUT, exist_ok=True)
 N_BOOT = 2000
 def sig(z): return 1/(1+np.exp(-z))
+from decimal import Decimal, ROUND_HALF_UP
+def fmt3(x):
+    """Single-step half-up rounding of the exact value to 3 dp.
+    Avoids the double-rounding artefact (0.87449 -> 0.8745 -> 0.875);
+    the honest 3-dp value of 0.87449 is 0.874."""
+    return str(Decimal(str(float(x))).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP))
 rng = np.random.default_rng(RS)
 report = {}
 t_start = time.time()
@@ -160,6 +166,7 @@ def fold(gid):
 res = Parallel(n_jobs=-1)(delayed(fold)(g) for g in groups)
 _, pp, yy = zip(*res); pp = np.array(pp); yy = np.array(yy)
 auc798 = roc_auc_score(yy, pp); ci798 = boot_auc_ci(yy, pp)
+print(f"    auc798 exact = {auc798!r}")
 pred = (pp >= 0.5).astype(int); tn, fp, fn, tp = [int(v) for v in confusion_matrix(yy, pred).ravel()]
 sens, spec = tp/(tp+fn), tn/(tn+fp)
 sens_ci, spec_ci = wilson_ci(tp, tp+fn), wilson_ci(tn, tn+fp)
@@ -173,7 +180,9 @@ report["within_cohort_798feat"] = {"auc":round(auc798,4),"auc_ci95":[round(x,3) 
 # ============================================== 2) HARMONIZED within-cohort
 sak = H[H.cohort=='sakar2019']; ys = sak['label'].astype(int)
 skf = StratifiedKFold(5, shuffle=True, random_state=RS)
-p_in = cross_val_predict(LogisticRegression(max_iter=5000), prep(sak[feats]), ys, cv=skf, method='predict_proba')[:,1]
+# fold-internal preprocessing: imputer and scaler are refit inside every CV fold
+p_in = cross_val_predict(Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
+        ('lr',LogisticRegression(max_iter=5000))]), sak[feats], ys, cv=skf, method='predict_proba')[:,1]
 auc_h = roc_auc_score(ys, p_in); fpr_h, tpr_h, _ = roc_curve(ys, p_in)
 ci_harm = boot_auc_ci(ys.values, p_in)
 report["within_cohort_harmonized_ci95"] = [round(x, 3) for x in ci_harm]
@@ -219,40 +228,45 @@ d_t, ci_t, p_t = boot_auc_diff(ys.values, p_in, yext, prE)
 report["auc_difference_transfer"] = {
     "internal_harmonized_auc": round(float(roc_auc_score(ys, p_in)), 4),
     "external_auc": round(float(roc_auc_score(yext, prE)), 4),
-    "delta": round(d_t, 4),
+    "delta_bootstrap_mean": round(d_t, 4),
+    "delta_point": round(float(roc_auc_score(ys, p_in) - roc_auc_score(yext, prE)), 4),
     "ci95": [round(x, 3) for x in ci_t],
     "p_value": round(p_t, 4),
-    "note": "Unpaired bootstrap (2000 resamples/group); within-cohort harmonised (Sakar2019) vs leave-one-lab-out external."
+    "note": "Unpaired bootstrap (2000 resamples/group); within-cohort harmonised (Sakar2019) vs leave-one-lab-out external. delta_bootstrap_mean is the mean of the bootstrap differences; delta_point is the plain difference of the two point estimates."
 }
 print(f"    delta AUC = {d_t:.3f}  95% CI {tuple(round(x,3) for x in ci_t)}  p = {p_t:.4f}")
 print(f"    >> PASTE: within-to-external drop (Delta AUC = {d_t:.3f}, 95% CI "
       f"{ci_t[0]:.3f}-{ci_t[1]:.3f}, p = {p_t:.3f})")
 
 # ---- [6b] SENSIBILIDADE DE HIPERPARAMETROS: RF e LR -------------------------
-print("[6b] RF / LR hyperparameter sensitivity ...")
-Xh = prep(sak[feats])
-aucs_rf, aucs_lr = [], []
+print("[6b] RF / LR / SVM hyperparameter sensitivity (fold-internal preprocessing) ...")
+def hp_cv(clf, method='predict_proba'):
+    pr = cross_val_predict(Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
+            ('m',clf)]), sak[feats], ys, cv=skf, method=method)
+    return roc_auc_score(ys, pr[:, 1] if method == 'predict_proba' else pr)
+aucs_rf, aucs_lr, aucs_svm = [], [], []
 for ne in [100, 300, 500]:
     for md in [None, 5, 10]:
-        pr = cross_val_predict(RandomForestClassifier(ne, max_depth=md, random_state=RS, n_jobs=-1),
-                               Xh, ys, cv=skf, method='predict_proba')[:, 1]
-        aucs_rf.append(roc_auc_score(ys, pr))
-for C in [0.1, 1, 10]:
+        aucs_rf.append(hp_cv(RandomForestClassifier(ne, max_depth=md, random_state=RS, n_jobs=-1)))
+for Creg in [0.1, 1, 10]:
     for sol in ['lbfgs', 'liblinear']:
-        pr = cross_val_predict(LogisticRegression(C=C, solver=sol, max_iter=5000),
-                               Xh, ys, cv=skf, method='predict_proba')[:, 1]
-        aucs_lr.append(roc_auc_score(ys, pr))
+        aucs_lr.append(hp_cv(LogisticRegression(C=Creg, solver=sol, max_iter=5000)))
+for Creg in [0.1, 1, 10]:
+    for gam in ['scale', 0.1, 0.01]:
+        aucs_svm.append(hp_cv(SVC(kernel='rbf', C=Creg, gamma=gam, random_state=RS),
+                              method='decision_function'))
 report["hp_sensitivity"] = {
     "rf_auc_range": [round(min(aucs_rf), 3), round(max(aucs_rf), 3)],
     "lr_auc_range": [round(min(aucs_lr), 3), round(max(aucs_lr), 3)],
-    "svm_auc_range": [0.762, 0.790]
+    "svm_auc_range": [round(min(aucs_svm), 3), round(max(aucs_svm), 3)]
 }
 print(f"    RF AUC range {report['hp_sensitivity']['rf_auc_range']} | "
       f"LR AUC range {report['hp_sensitivity']['lr_auc_range']}")
 
 # ============================================== 4) PREDICTABILITY (confound)
 yc = pd.factorize(H['lab'])[0]
-predc = cross_val_predict(RandomForestClassifier(300, random_state=RS, n_jobs=-1), prep(H[feats]), yc, cv=skf)
+predc = cross_val_predict(Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
+        ('rf',RandomForestClassifier(300, random_state=RS, n_jobs=-1))]), H[feats], yc, cv=skf)
 pacc = float((predc==yc).mean()); chance = float(pd.Series(yc).value_counts(normalize=True).max())
 report["lab_predictability"] = {"acc":round(pacc,4),"chance":round(chance,4)}
 print(f"[4] Lab predictability acc={pacc:.3f} (chance={chance:.3f})")
@@ -261,7 +275,8 @@ print(f"[4] Lab predictability acc={pacc:.3f} (chance={chance:.3f})")
 print("[5] Label-permutation test ...")
 def perm_once(seed):
     r = np.random.default_rng(seed); yp = r.permutation(ys.values)
-    pr = cross_val_predict(LogisticRegression(max_iter=5000), prep(sak[feats]), yp, cv=skf, method='predict_proba')[:,1]
+    pr = cross_val_predict(Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
+            ('lr',LogisticRegression(max_iter=5000))]), sak[feats], yp, cv=skf, method='predict_proba')[:,1]
     return roc_auc_score(yp, pr)
 NPERM = 200
 null = Parallel(n_jobs=-1)(delayed(perm_once)(s) for s in range(NPERM))
@@ -354,41 +369,56 @@ prov_df = pd.DataFrame(prov); prov_df.to_csv(f"{OUT}/feature_provenance_table.cs
 print(f"[11] feature_provenance_table.csv ({len(prov_df)} features)")
 
 # ============================================== 12) FIGURES
+# Nature style: no in-figure titles (captions carry them); vector PDF + PNG emitted.
 C = {'int':'#1b3a6b','ext':'#c0392b','har':'#2e86c1','warn':'#b03a2e','gray':'#7f8c8d'}
-plt.figure(figsize=(6,5.2))
-plt.plot(fpr_i,tpr_i,color=C['int'],lw=2.4,label=f'Within-cohort LOSO (798f), AUC={auc798:.3f}')
-plt.plot(fpr_h,tpr_h,color=C['har'],lw=2,ls='--',label=f'Within-cohort (harmon. 19f), AUC={auc_h:.3f}')
-plt.plot(fpr_e,tpr_e,color=C['ext'],lw=2.4,label=f'Leave-one-lab-out, AUC={auc_e:.3f}')
-plt.plot([0,1],[0,1],':',color=C['gray']); plt.xlabel('False Positive Rate'); plt.ylabel('True Positive Rate')
-plt.title('Internal vs. external validation',fontweight='bold'); plt.legend(fontsize=8,loc='lower right')
-plt.tight_layout(); plt.savefig(f"{OUT}/fig1_roc_internal_vs_external.png",dpi=200); plt.close()
+def saveboth(name):
+    plt.savefig(f"{OUT}/{name}.png", dpi=200); plt.savefig(f"{OUT}/{name}.pdf"); plt.close()
 
-plt.figure(figsize=(7.2,4.6))
-labs=['Literature\n(uncorrected)','Within LOSO\n(798f)','Within\n(harmon.)','Leave-one-\nlab-out']
-vals=[0.97,auc798,auc_h,auc_e]
-err=[[0.02,auc798-ci798[0],0.03,auc_e-ext['Istanbul->Extremadura']['ci'][0]],
-     [0.02,ci798[1]-auc798,0.03,ext['Istanbul->Extremadura']['ci'][1]-auc_e]]
-plt.bar(labs,vals,color=[C['gray'],C['int'],C['har'],C['ext']],yerr=err,capsize=5,alpha=.9)
-plt.axhline(0.5,color='k',ls=':'); plt.ylim(0.45,1.02); plt.ylabel('AUC')
-plt.title('Discrimination collapses under honest external validation',fontweight='bold',fontsize=11)
-for i,v in enumerate(vals): plt.text(i,v+0.006,f'{v:.3f}',ha='center',fontsize=9)
-plt.tight_layout(); plt.savefig(f"{OUT}/fig2_auc_summary.png",dpi=200); plt.close()
+def draw_roc(ax):
+    ax.plot(fpr_i,tpr_i,color=C['int'],lw=2.4,label=f'Within-cohort LOSO (798f), AUC={fmt3(auc798)}')
+    ax.plot(fpr_h,tpr_h,color=C['har'],lw=2,ls='--',label=f'Within-cohort (harmon. 19f), AUC={fmt3(auc_h)}')
+    ax.plot(fpr_e,tpr_e,color=C['ext'],lw=2.4,label=f'Leave-one-lab-out, AUC={fmt3(auc_e)}')
+    ax.plot([0,1],[0,1],':',color=C['gray'])
+    ax.set_xlabel('False Positive Rate'); ax.set_ylabel('True Positive Rate')
+    ax.legend(fontsize=8, loc='lower right')
+
+def draw_bars(ax):
+    labs=['Literature\n(uncorrected)','Within LOSO\n(798f)','Within\n(harmon.)','Leave-one-\nlab-out']
+    vals=[0.97,auc798,auc_h,auc_e]
+    err=[[0.02,auc798-ci798[0],auc_h-ci_harm[0],auc_e-ext['Istanbul->Extremadura']['ci'][0]],
+         [0.02,ci798[1]-auc798,ci_harm[1]-auc_h,ext['Istanbul->Extremadura']['ci'][1]-auc_e]]
+    ax.bar(labs,vals,color=[C['gray'],C['int'],C['har'],C['ext']],yerr=err,capsize=5,alpha=.9)
+    ax.axhline(0.5,color='k',ls=':'); ax.set_ylim(0.45,1.02); ax.set_ylabel('AUC')
+    ax.tick_params(axis='x', labelsize=8)
+    for i,v in enumerate(vals): ax.text(i,v+0.006,fmt3(v),ha='center',fontsize=9)
+
+plt.figure(figsize=(6,5.2)); draw_roc(plt.gca())
+plt.tight_layout(); saveboth("fig1_roc_internal_vs_external")
+
+plt.figure(figsize=(7.2,4.6)); draw_bars(plt.gca())
+plt.tight_layout(); saveboth("fig2_auc_summary")
+
+# composite for the manuscript: (a) ROC, (b) AUC summary
+fig, axs = plt.subplots(1, 2, figsize=(11.6, 4.8))
+draw_roc(axs[0]); draw_bars(axs[1])
+for ax, letter in zip(axs, ['a','b']):
+    ax.text(-0.13, 1.04, letter, transform=ax.transAxes, fontweight='bold', fontsize=13)
+plt.tight_layout(); saveboth("figM1_validation")
 
 plt.figure(figsize=(5,4.4))
-plt.bar(['Predict LAB\nfrom features','Chance'],[pacc,chance],color=[C['warn'],C['gray']],alpha=.9)
-plt.ylim(0,1.08); plt.ylabel('Accuracy'); plt.title('Cohort identity is predictable\n(batch-effect confound)',fontsize=10.5,fontweight='bold')
+plt.bar(['Predict LAB\nfrom features','Majority\nbaseline'],[pacc,chance],color=[C['warn'],C['gray']],alpha=.9)
+plt.ylim(0,1.08); plt.ylabel('Accuracy')
 for i,v in enumerate([pacc,chance]): plt.text(i,v+0.01,f'{v:.2f}',ha='center')
-plt.tight_layout(); plt.savefig(f"{OUT}/fig3_dataset_predictability.png",dpi=200); plt.close()
+plt.tight_layout(); saveboth("fig3_dataset_predictability")
 
 plt.figure(figsize=(6,4.6)); impS.head(10)[::-1].plot(kind='barh',color=C['har'])
-plt.xlabel('Mean AUC drop when permuted'); plt.title('Permutation importance (Sakar2019, held-out)',fontweight='bold',fontsize=11)
-plt.tight_layout(); plt.savefig(f"{OUT}/fig4_permutation_importance.png",dpi=200); plt.close()
+plt.xlabel('Mean AUC drop when permuted')
+plt.tight_layout(); saveboth("fig4_permutation_importance")
 
 plt.figure(figsize=(4.6,4)); CM=np.array([[tn,fp],[fn,tp]]); plt.imshow(CM,cmap='Blues')
 for (r,cc),v in np.ndenumerate(CM): plt.text(cc,r,str(v),ha='center',va='center',fontsize=15,color='white' if v>CM.max()/2 else 'black')
 plt.xticks([0,1],['Pred HC','Pred PD']); plt.yticks([0,1],['True HC','True PD'])
-plt.title(f'Confusion matrix (LOSO)\nSens={sens:.3f} Spec={spec:.3f}',fontsize=10,fontweight='bold')
-plt.tight_layout(); plt.savefig(f"{OUT}/fig5_confusion_within.png",dpi=200); plt.close()
+plt.tight_layout(); saveboth("fig5_confusion_within")
 
 # ============================================== SAVE
 report["runtime_seconds"] = round(time.time()-t_start,1)
