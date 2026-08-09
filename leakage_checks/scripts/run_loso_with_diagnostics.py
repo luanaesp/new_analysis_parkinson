@@ -79,7 +79,7 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 # ==============================
 # CONFIG
 # ==============================
-INPUT_PATH = r"C:\Users\mdant\Downloads\UNIFIED_RECONSTRUCTED.csv"
+INPUT_PATH = os.environ.get("UNIFIED_CSV", "UNIFIED_RECONSTRUCTED.csv")
 OUT_DIR = "outputs_loso"
 os.makedirs(OUT_DIR, exist_ok=True)
 

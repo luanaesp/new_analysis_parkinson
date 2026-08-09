@@ -25,6 +25,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import Pipeline
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.metrics import roc_auc_score
 from imblearn.over_sampling import SMOTE
 from joblib import Parallel, delayed
@@ -431,8 +433,62 @@ for k, v in subsets.items():
         print(f"    {k}: within={v['within_cohort_auc']} external={v['external_auc']} "
               f"CI{v['external_ci95']} ({v['n_features']} feats)")
 
+# ============ [R9] t-SNE / PCA REGENERATED ON THE RELEASED HARMONISED CORE
+print("[R9] Regenerating t-SNE and PCA on the harmonised subject-level core ...")
+Xemb = StandardScaler().fit_transform(H[feats])
+yemb = H['label'].astype(int).values
+lab_emb = H['lab'].values
+
+pca = PCA(n_components=2, random_state=RS).fit(Xemb)
+Z_pca = pca.transform(Xemb)
+evr = pca.explained_variance_ratio_
+load = pd.DataFrame(pca.components_.T, index=feats, columns=['PC1','PC2'])
+load['mag'] = load.abs().max(axis=1)
+top_load = load.sort_values('mag', ascending=False).head(6).index.tolist()
+n_mfcc_top = sum(f.startswith('mfcc') for f in top_load)
+
+Z_tsne = TSNE(n_components=2, perplexity=30, max_iter=1000,
+              init='pca', random_state=RS).fit_transform(Xemb)
+
+rep["embeddings"] = {
+    "space": "harmonised 19-feature core, subject level (n=392)",
+    "pca_explained_variance_pc1": round(float(evr[0]), 4),
+    "pca_explained_variance_pc2": round(float(evr[1]), 4),
+    "pca_explained_variance_pc1_pc2": round(float(evr[:2].sum()), 4),
+    "pca_top6_loadings": top_load,
+    "pca_n_mfcc_in_top6": int(n_mfcc_top),
+    "tsne_perplexity": 30, "tsne_max_iter": 1000,
+    "note": "Regenerated from the released pipeline. Earlier versions of these panels came "
+            "from a superseded exploratory script and used a continuous colour scale for a "
+            "binary variable; class is now encoded by two discrete colours and laboratory "
+            "family by marker shape."
+}
+print(f"    PC1={evr[0]:.1%} PC2={evr[1]:.1%} (sum {evr[:2].sum():.1%}) | "
+      f"top loadings: {top_load} | MFCC in top6: {n_mfcc_top}")
+
 # ==================================================================== FIGURES
 CLR = {'pd':'#1b3a6b','lab':'#c0392b','gray':'#7f8c8d','ok':'#2e86c1'}
+
+# figR5 / figR6: discrete-colour embeddings, marker shape = laboratory family
+CLS = {0: '#2e86c1', 1: '#c0392b'}          # HC / PD, two discrete colours
+MRK = {'Istanbul': 'o', 'Extremadura': '^'}
+for Z, nm, ttl, xl, yl in [
+    (Z_tsne, "figR5_tsne_discrete", 't-SNE of the harmonised acoustic core',
+     't-SNE dimension 1', 't-SNE dimension 2'),
+    (Z_pca, "figR6_pca_discrete", 'PCA of the harmonised acoustic core',
+     f'PC1 ({evr[0]:.1%} of variance)', f'PC2 ({evr[1]:.1%} of variance)')]:
+    plt.figure(figsize=(6.4,5.4))
+    for lb, mk in MRK.items():
+        for cl, cc in CLS.items():
+            m = (lab_emb == lb) & (yemb == cl)
+            if not m.any(): continue
+            plt.scatter(Z[m,0], Z[m,1], c=cc, marker=mk, s=34, alpha=.78,
+                        edgecolor='white', linewidth=.5,
+                        label=f"{'PD' if cl else 'HC'} — {lb}")
+    plt.xlabel(xl); plt.ylabel(yl)
+    plt.title(ttl, fontweight='bold', fontsize=11)
+    plt.legend(fontsize=7.5, framealpha=.92, loc='best')
+    plt.tight_layout(); plt.savefig(f"{OUT}/{nm}.png", dpi=200); plt.close()
 
 # figR1: importance vs batch-effect scatter
 plt.figure(figsize=(6.8,5.8))

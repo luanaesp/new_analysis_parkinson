@@ -40,6 +40,15 @@ A second script adds the analyses requested in the second review round. It write
 6. **Clinical signal versus batch signal** per feature — univariate AUC for PD vs HC against
    univariate AUC for separating the two laboratories.
 7. **Minimal-core robustness check** including the 2013 Istanbul cohort.
+8. **Batch-neutral feature subsets.** Within-cohort and leave-one-laboratory-out AUC recomputed
+   on nested subsets defined purely by batch discriminability (never by outcome), so the
+   comparison is not circular. The four most laboratory-discriminative features keep
+   within-cohort utility (0.736) but transfer at chance (0.532); the strictly batch-neutral
+   core narrows the internal-to-external gap from 0.129 to 0.066. The effect is **not** robust
+   to the neutrality threshold and is not offered as a remedy.
+9. **t-SNE and PCA regenerated** on the harmonised subject-level core, with disease status in two
+   discrete colours and laboratory family by marker shape. PC1+PC2 explain 46.3% of the variance
+   (31.9% / 14.5%); the largest loadings are HNR, PPE and local shimmer.
 
 ## A note on `leakage_checks/`
 
