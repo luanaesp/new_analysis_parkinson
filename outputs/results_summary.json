@@ -12,8 +12,8 @@
   "within_cohort_798feat": {
     "auc": 0.8745,
     "auc_ci95": [
-      0.832,
-      0.911
+      0.835,
+      0.91
     ],
     "sensitivity": 0.8377,
     "sens_ci95": [
@@ -33,40 +33,40 @@
     ]
   },
   "within_cohort_harmonized_ci95": [
-    0.716,
-    0.84
+    0.712,
+    0.838
   ],
   "within_cohort_harmonized": 0.7793,
   "external": {
     "Istanbul->Extremadura": {
       "auc": 0.65,
       "ci": [
-        0.554,
-        0.739
+        0.562,
+        0.738
       ],
       "n": 140
     },
     "Extremadura->Istanbul": {
       "auc": 0.6385,
       "ci": [
-        0.557,
-        0.721
+        0.556,
+        0.718
       ],
       "n": 252
     },
     "sakar2019->naranjo": {
       "auc": 0.6469,
       "ci": [
-        0.522,
-        0.765
+        0.52,
+        0.77
       ],
       "n": 80
     },
     "sakar2019->carron": {
       "auc": 0.6644,
       "ci": [
-        0.521,
-        0.803
+        0.519,
+        0.797
       ],
       "n": 60
     }
@@ -74,13 +74,13 @@
   "auc_difference_transfer": {
     "internal_harmonized_auc": 0.7793,
     "external_auc": 0.65,
-    "delta_bootstrap_mean": 0.1308,
+    "delta_bootstrap_mean": 0.1294,
     "delta_point": 0.1293,
     "ci95": [
-      0.022,
-      0.241
+      0.021,
+      0.238
     ],
-    "p_value": 0.023,
+    "p_value": 0.02,
     "note": "Unpaired bootstrap (2000 resamples/group); within-cohort harmonised (Sakar2019) vs leave-one-lab-out external. delta_bootstrap_mean is the mean of the bootstrap differences; delta_point is the plain difference of the two point estimates."
   },
   "hp_sensitivity": {
@@ -141,5 +141,5 @@
     "honest_subjectlevel_harmonized_auc": 0.7793,
     "inflation": 0.0299
   },
-  "runtime_seconds": 271.5
+  "runtime_seconds": 272.7
 }

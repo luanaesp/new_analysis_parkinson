@@ -43,19 +43,15 @@ PATHS = {
 }
 OUT = "outputs"; os.makedirs(OUT, exist_ok=True)
 N_BOOT = 2000
-rng = np.random.default_rng(RS)
+import bootstrap_utils as _bu
+# Same construction as the main pipeline: one labelled stream per analysis.
+def stream(label): return _bu.stream(label, RS)
 rep = {}
 t0 = time.time()
 
 def sig(z): return 1/(1+np.exp(-z))
 
-def boot_auc_ci(y, p, n=N_BOOT):
-    y = np.asarray(y); p = np.asarray(p); a = []
-    for _ in range(n):
-        idx = rng.integers(0, len(y), len(y))
-        if len(np.unique(y[idx])) > 1: a.append(roc_auc_score(y[idx], p[idx]))
-    if not a: return (np.nan, np.nan)
-    return float(np.percentile(a, 2.5)), float(np.percentile(a, 97.5))
+def boot_auc_ci(y, p, label, n=N_BOOT): return _bu.boot_auc_ci(y, p, label, RS, n)
 
 df = pd.read_csv(PATHS["unified"])
 skf = StratifiedKFold(5, shuffle=True, random_state=RS)
@@ -231,7 +227,7 @@ def loso_single_cohort(source_val, cols):
 percohort = {}
 for src, cols, nm in [('pd_speech', f_sak, 'sakar2019'), ('replicated', f_nar, 'naranjo')]:
     yv, pv = loso_single_cohort(src, cols)
-    a = roc_auc_score(yv, pv); ci = boot_auc_ci(yv, pv)
+    a = roc_auc_score(yv, pv); ci = boot_auc_ci(yv, pv, f"per_cohort_native_loso/{nm}")
     percohort[nm] = {"auc": round(float(a), 4), "ci95": [round(x,3) for x in ci],
                      "n_subjects": int(len(yv)), "n_features": len(cols),
                      "pd_rate": round(float(yv.mean()), 4), "imputed_values": 0}
@@ -274,7 +270,7 @@ for v in sorted(set(sx)):
     yv = ys.values[m]; pv = p_sex_model[m]
     if len(np.unique(yv)) < 2:
         sex_res[f"sex_{v}"] = {"n": int(m.sum()), "auc": None}; continue
-    a = roc_auc_score(yv, pv); ci = boot_auc_ci(yv, pv)
+    a = roc_auc_score(yv, pv); ci = boot_auc_ci(yv, pv, f"sex_stratified/sex_{v}")
     sex_res[f"sex_{v}"] = {"n": int(m.sum()), "n_pd": int(yv.sum()),
                            "pd_rate": round(float(yv.mean()), 4),
                            "auc": round(float(a), 4), "ci95": [round(x,3) for x in ci]}
@@ -287,8 +283,9 @@ m0, m1 = sx == g0, sx == g1
 y0, q0 = ys.values[m0], p_sex_model[m0]
 y1, q1 = ys.values[m1], p_sex_model[m1]
 diffs = []
+_g_sex = stream("sex_stratified/difference")
 for _ in range(N_BOOT):
-    i0 = rng.integers(0, len(y0), len(y0)); i1 = rng.integers(0, len(y1), len(y1))
+    i0 = _g_sex.integers(0, len(y0), len(y0)); i1 = _g_sex.integers(0, len(y1), len(y1))
     if len(np.unique(y0[i0])) > 1 and len(np.unique(y1[i1])) > 1:
         diffs.append(roc_auc_score(y0[i0], q0[i0]) - roc_auc_score(y1[i1], q1[i1]))
 diffs = np.array(diffs)
@@ -370,14 +367,14 @@ try:
     tr_a = base[base.lab=='Istanbul']; te_a = base[base.lab=='Extremadura']
     y_a = te_a['label'].astype(int).values
     p_a = ens_pred(tr_a, te_a, mini); auc_a = roc_auc_score(y_a, p_a)
-    ci_a = boot_auc_ci(y_a, p_a)
+    ci_a = boot_auc_ci(y_a, p_a, "minimal_core_2013/excluded")
 
     # (b) 2013 cohort added to the Istanbul training side
     withx = pd.concat([base, s13[mini + ['label','cohort','lab']]], ignore_index=True)
     tr_b = withx[withx.lab=='Istanbul']; te_b = withx[withx.lab=='Extremadura']
     y_b = te_b['label'].astype(int).values
     p_b = ens_pred(tr_b, te_b, mini); auc_b = roc_auc_score(y_b, p_b)
-    ci_b = boot_auc_ci(y_b, p_b)
+    ci_b = boot_auc_ci(y_b, p_b, "minimal_core_2013/included")
 
     rep["minimal_core_2013_check"] = {
         "features": mini,
@@ -403,7 +400,7 @@ print("[R8] Batch-neutral feature subsets ...")
 neutral_strict = fi.loc[fi.auc_lab_discrimination < fi.auc_pd_within_sakar2019, 'feature'].tolist()
 neutral_thresh = fi.loc[fi.auc_lab_discrimination < 0.70, 'feature'].tolist()
 
-def eval_subset(cols):
+def eval_subset(cols, label):
     if len(cols) < 2: return None
     p_int = cross_val_predict(honest_pipe(LogisticRegression(max_iter=5000)),
                               sak[cols], ys, cv=skf, method='predict_proba')[:,1]
@@ -414,14 +411,14 @@ def eval_subset(cols):
     return {"n_features": len(cols), "features": cols,
             "within_cohort_auc": round(float(a_int), 4),
             "external_auc": round(float(a_ext), 4),
-            "external_ci95": [round(x,3) for x in boot_auc_ci(y_ext, p_ext)]}
+            "external_ci95": [round(x,3) for x in boot_auc_ci(y_ext, p_ext, f"batch_neutral_subsets/{label}")]}
 
 subsets = {
-    "all_19_features": eval_subset(feats),
-    "batch_neutral_strict (lab AUC < PD AUC)": eval_subset(neutral_strict),
-    "batch_neutral_threshold (lab AUC < 0.70)": eval_subset(neutral_thresh),
+    "all_19_features": eval_subset(feats, "all_19_features"),
+    "batch_neutral_strict (lab AUC < PD AUC)": eval_subset(neutral_strict, "batch_neutral_strict"),
+    "batch_neutral_threshold (lab AUC < 0.70)": eval_subset(neutral_thresh, "batch_neutral_threshold"),
     "batch_driven_only (lab AUC > 0.90)":
-        eval_subset(fi.loc[fi.auc_lab_discrimination > 0.90, 'feature'].tolist()),
+        eval_subset(fi.loc[fi.auc_lab_discrimination > 0.90, 'feature'].tolist(), "batch_driven_only"),
 }
 rep["batch_neutral_subsets"] = subsets
 rep["batch_neutral_subsets"]["note"] = (

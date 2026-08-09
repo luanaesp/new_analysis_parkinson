@@ -65,7 +65,10 @@ def fmt3(x):
     Avoids the double-rounding artefact (0.87449 -> 0.8745 -> 0.875);
     the honest 3-dp value of 0.87449 is 0.874."""
     return str(Decimal(str(float(x))).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP))
-rng = np.random.default_rng(RS)
+import bootstrap_utils as _bu
+# Each bootstrap draws from its own labelled stream, so an interval depends only
+# on (seed, label, data) and never on execution order. See bootstrap_utils.py.
+def stream(label): return _bu.stream(label, RS)
 report = {}
 t_start = time.time()
 
@@ -75,12 +78,7 @@ def wilson_ci(k, n, z=1.96):
     c = (p+z**2/(2*n))/d; h = z*np.sqrt(p*(1-p)/n+z**2/(4*n**2))/d
     return (c-h, c+h)
 
-def boot_auc_ci(y, p, n=N_BOOT):
-    y = np.asarray(y); p = np.asarray(p); a = []
-    for _ in range(n):
-        idx = rng.integers(0, len(y), len(y))
-        if len(np.unique(y[idx])) > 1: a.append(roc_auc_score(y[idx], p[idx]))
-    return float(np.percentile(a, 2.5)), float(np.percentile(a, 97.5))
+def boot_auc_ci(y, p, label, n=N_BOOT): return _bu.boot_auc_ci(y, p, label, RS, n)
 
 print("="*70)
 print("ENV:", platform.platform(), "| python", platform.python_version())
@@ -165,7 +163,7 @@ def fold(gid):
     return gid, float(p.mean()), int(ya[te][0])
 res = Parallel(n_jobs=-1)(delayed(fold)(g) for g in groups)
 _, pp, yy = zip(*res); pp = np.array(pp); yy = np.array(yy)
-auc798 = roc_auc_score(yy, pp); ci798 = boot_auc_ci(yy, pp)
+auc798 = roc_auc_score(yy, pp); ci798 = boot_auc_ci(yy, pp, "within_cohort_798feat")
 print(f"    auc798 exact = {auc798!r}")
 pred = (pp >= 0.5).astype(int); tn, fp, fn, tp = [int(v) for v in confusion_matrix(yy, pred).ravel()]
 sens, spec = tp/(tp+fn), tn/(tn+fp)
@@ -184,7 +182,7 @@ skf = StratifiedKFold(5, shuffle=True, random_state=RS)
 p_in = cross_val_predict(Pipeline([('i',SimpleImputer(strategy='median')),('s',StandardScaler()),
         ('lr',LogisticRegression(max_iter=5000))]), sak[feats], ys, cv=skf, method='predict_proba')[:,1]
 auc_h = roc_auc_score(ys, p_in); fpr_h, tpr_h, _ = roc_curve(ys, p_in)
-ci_harm = boot_auc_ci(ys.values, p_in)
+ci_harm = boot_auc_ci(ys.values, p_in, "within_cohort_harmonised")
 report["within_cohort_harmonized_ci95"] = [round(x, 3) for x in ci_harm]
 print(f"[2b] within-cohort harmonised AUC = {auc_h:.4f}  95% CI "
       f"({ci_harm[0]:.3f}, {ci_harm[1]:.3f})")
@@ -196,11 +194,11 @@ print("[3] Leave-one-laboratory-out + pairwise ...")
 ext = {}
 for trn, tst in [('Istanbul','Extremadura'),('Extremadura','Istanbul')]:
     tr = H[H.lab==trn]; te = H[H.lab==tst]; pr = ens_pred(tr, te, feats); yt = te['label'].astype(int).values
-    ext[f"{trn}->{tst}"] = {"auc":round(roc_auc_score(yt,pr),4),"ci":[round(x,3) for x in boot_auc_ci(yt,pr)],"n":len(te)}
+    ext[f"{trn}->{tst}"] = {"auc":round(roc_auc_score(yt,pr),4),"ci":[round(x,3) for x in boot_auc_ci(yt,pr,f"external/{trn}->{tst}")],"n":len(te)}
 trS = H[H.cohort=='sakar2019']
 for tc in ['naranjo','carron']:
     te = H[H.cohort==tc]; pr = ens_pred(trS, te, feats); yt = te['label'].astype(int).values
-    ext[f"sakar2019->{tc}"] = {"auc":round(roc_auc_score(yt,pr),4),"ci":[round(x,3) for x in boot_auc_ci(yt,pr)],"n":len(te)}
+    ext[f"sakar2019->{tc}"] = {"auc":round(roc_auc_score(yt,pr),4),"ci":[round(x,3) for x in boot_auc_ci(yt,pr,f"external/sakar2019->{tc}")],"n":len(te)}
 
 teE = H[H.lab=='Extremadura']; prE = ens_pred(H[H.lab=='Istanbul'], teE, feats)
 fpr_e, tpr_e, _ = roc_curve(teE['label'].astype(int), prE); auc_e = roc_auc_score(teE['label'].astype(int), prE)
@@ -209,22 +207,11 @@ for k,v in ext.items(): print(f"    {k}: AUC={v['auc']} CI{v['ci']} (n={v['n']})
 
 # ---- [3b] TESTE FORMAL DA DIFERENCA DE AUC (interno vs externo) -------------
 print("[3b] Bootstrap AUC-difference test (transfer effect) ...")
-def boot_auc_diff(y1, p1, y2, p2, n=N_BOOT):
-    y1, p1, y2, p2 = map(np.asarray, (y1, p1, y2, p2))
-    diffs = []
-    for _ in range(n):
-        i1 = rng.integers(0, len(y1), len(y1))
-        i2 = rng.integers(0, len(y2), len(y2))
-        if len(np.unique(y1[i1])) > 1 and len(np.unique(y2[i2])) > 1:
-            diffs.append(roc_auc_score(y1[i1], p1[i1]) - roc_auc_score(y2[i2], p2[i2]))
-    diffs = np.array(diffs)
-    pval = 2 * min((diffs <= 0).mean(), (diffs >= 0).mean())
-    return (float(np.mean(diffs)),
-            (float(np.percentile(diffs, 2.5)), float(np.percentile(diffs, 97.5))),
-            float(min(pval, 1.0)))
+def boot_auc_diff(y1, p1, y2, p2, label, n=N_BOOT):
+    return _bu.boot_auc_diff(y1, p1, y2, p2, label, RS, n)
 
 yext = teE['label'].astype(int).values
-d_t, ci_t, p_t = boot_auc_diff(ys.values, p_in, yext, prE)
+d_t, ci_t, p_t = boot_auc_diff(ys.values, p_in, yext, prE, "within_vs_external")
 report["auc_difference_transfer"] = {
     "internal_harmonized_auc": round(float(roc_auc_score(ys, p_in)), 4),
     "external_auc": round(float(roc_auc_score(yext, prE)), 4),

@@ -76,6 +76,11 @@ Outputs are written to `./outputs/`.
 ## Reproducibility
 
 * Fixed random seed: 42
+* **Order-independent resampling.** Every bootstrap draws from its own generator, seeded from
+  the global seed plus a stable textual label (`bootstrap_utils.py`). A confidence interval
+  therefore depends only on `(seed, label, data)` and never on how many random numbers were
+  consumed earlier in the script, so adding or reordering an analysis cannot shift any other
+  interval. `python test_rng_isolation.py` asserts this and fails if it regresses.
 * Commit used to produce the reported results: `156a6a4d3e4887e0a9eaf190ca1549313cc555b1`
   (the first-round results were produced at `f7c00e5f0138dc6c80d9e5802d5b58957c0b0764`; the
   headline numbers below are unchanged between the two)
