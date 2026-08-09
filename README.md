@@ -22,7 +22,7 @@ The pipeline establishes an honest, externally validated benchmark across multip
 ## Second-round revision analyses (`run_revision2_analyses.py`)
 
 A second script adds the analyses requested in the second review round. It writes
-`outputs/revision2_summary.json`, `outputs/feature_batch_vs_pd_table.csv`, and `figR1`–`figR3`.
+`outputs/revision2_summary.json`, `outputs/feature_batch_vs_pd_table.csv`, and `figR1`–`figR6`.
 
 1. **Imputation audit.** The harmonised 19-feature core contains **zero** missing values in all
    three cohorts, so the imputer is a no-op for every external-validation result (external AUC is
@@ -76,7 +76,9 @@ Outputs are written to `./outputs/`.
 ## Reproducibility
 
 * Fixed random seed: 42
-* Commit used to produce the reported results: `f7c00e5f0138dc6c80d9e5802d5b58957c0b0764`
+* Commit used to produce the reported results: `156a6a4d3e4887e0a9eaf190ca1549313cc555b1`
+  (the first-round results were produced at `f7c00e5f0138dc6c80d9e5802d5b58957c0b0764`; the
+  headline numbers below are unchanged between the two)
 * Environment used for the reported results: Python 3.14, scikit-learn 1.8.0, imbalanced-learn 0.14.1, NumPy 2.4.2, pandas 3.0.1 (16-core workstation, ~3 min runtime).
 * Headline numbers: within-cohort LOSO AUC = 0.875 (95% CI 0.832-0.911); leave-one-laboratory-out AUC = 0.650 (95% CI 0.555-0.738); laboratory predictability = 100% (chance 64%); label-permutation null AUC = 0.502 (p = 0.005).
 
