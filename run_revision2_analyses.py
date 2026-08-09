@@ -395,6 +395,42 @@ except Exception as e:
     rep["minimal_core_2013_check"] = {"error": str(e)}
     print("    [skip]", e)
 
+# ================ [R8] DOES DROPPING BATCH-DRIVEN FEATURES RESCUE TRANSFER?
+print("[R8] Batch-neutral feature subsets ...")
+neutral_strict = fi.loc[fi.auc_lab_discrimination < fi.auc_pd_within_sakar2019, 'feature'].tolist()
+neutral_thresh = fi.loc[fi.auc_lab_discrimination < 0.70, 'feature'].tolist()
+
+def eval_subset(cols):
+    if len(cols) < 2: return None
+    p_int = cross_val_predict(honest_pipe(LogisticRegression(max_iter=5000)),
+                              sak[cols], ys, cv=skf, method='predict_proba')[:,1]
+    a_int = roc_auc_score(ys, p_int)
+    p_ext = ens_pred(H[H.lab=='Istanbul'], H[H.lab=='Extremadura'], cols)
+    y_ext = H[H.lab=='Extremadura']['label'].astype(int).values
+    a_ext = roc_auc_score(y_ext, p_ext)
+    return {"n_features": len(cols), "features": cols,
+            "within_cohort_auc": round(float(a_int), 4),
+            "external_auc": round(float(a_ext), 4),
+            "external_ci95": [round(x,3) for x in boot_auc_ci(y_ext, p_ext)]}
+
+subsets = {
+    "all_19_features": eval_subset(feats),
+    "batch_neutral_strict (lab AUC < PD AUC)": eval_subset(neutral_strict),
+    "batch_neutral_threshold (lab AUC < 0.70)": eval_subset(neutral_thresh),
+    "batch_driven_only (lab AUC > 0.90)":
+        eval_subset(fi.loc[fi.auc_lab_discrimination > 0.90, 'feature'].tolist()),
+}
+rep["batch_neutral_subsets"] = subsets
+rep["batch_neutral_subsets"]["note"] = (
+    "Can cross-laboratory transfer be rescued by discarding the features that carry the "
+    "strongest laboratory signature? Within-cohort and leave-one-laboratory-out AUC are "
+    "recomputed on nested feature subsets defined purely by batch discriminability, never "
+    "by outcome performance, so the comparison is not circular.")
+for k, v in subsets.items():
+    if isinstance(v, dict) and v:
+        print(f"    {k}: within={v['within_cohort_auc']} external={v['external_auc']} "
+              f"CI{v['external_ci95']} ({v['n_features']} feats)")
+
 # ==================================================================== FIGURES
 CLR = {'pd':'#1b3a6b','lab':'#c0392b','gray':'#7f8c8d','ok':'#2e86c1'}
 
@@ -443,6 +479,31 @@ plt.axhline(0.5, color='k', ls=':'); plt.ylim(0.45, 1.0); plt.ylabel('AUC')
 plt.title('Pooled within-cohort performance, decomposed', fontweight='bold', fontsize=11)
 for i, v in enumerate(v3): plt.text(i, v+0.01, f'{v:.3f}', ha='center', fontsize=9)
 plt.tight_layout(); plt.savefig(f"{OUT}/figR3_pooled_decomposition.png", dpi=200); plt.close()
+
+# figR4: the generalisation gap tracks batch contamination
+order = ["batch_driven_only (lab AUC > 0.90)", "all_19_features",
+         "batch_neutral_threshold (lab AUC < 0.70)", "batch_neutral_strict (lab AUC < PD AUC)"]
+short = ["Batch-driven only\n(4 features)", "All harmonised\n(19 features)",
+         "Batch-neutral, lenient\n(7 features)", "Batch-neutral, strict\n(5 features)"]
+wi = [subsets[k]["within_cohort_auc"] for k in order]
+ex = [subsets[k]["external_auc"] for k in order]
+xp = np.arange(len(order)); w = 0.36
+plt.figure(figsize=(7.6,4.8))
+plt.bar(xp-w/2, wi, w, label='Within-cohort', color=CLR['pd'], alpha=.9)
+plt.bar(xp+w/2, ex, w, label='Leave-one-laboratory-out', color=CLR['lab'], alpha=.9)
+for i in range(len(order)):
+    plt.text(xp[i]-w/2, wi[i]+.008, f'{wi[i]:.3f}', ha='center', fontsize=8)
+    plt.text(xp[i]+w/2, ex[i]+.008, f'{ex[i]:.3f}', ha='center', fontsize=8)
+    plt.annotate('', xy=(xp[i]+w/2, ex[i]), xytext=(xp[i]-w/2, wi[i]),
+                 arrowprops=dict(arrowstyle='->', color='#444444', lw=1.1, ls=':'))
+    plt.text(xp[i], (wi[i]+ex[i])/2, f'  −{wi[i]-ex[i]:.3f}', fontsize=8,
+             color='#444444', ha='left', va='center')
+plt.xticks(xp, short, fontsize=8.5)
+plt.axhline(0.5, color='k', ls=':'); plt.ylim(0.45, 0.88); plt.ylabel('AUC')
+plt.title('The generalisation gap widens with batch contamination',
+          fontweight='bold', fontsize=11)
+plt.legend(fontsize=8.5, loc='lower left')
+plt.tight_layout(); plt.savefig(f"{OUT}/figR4_generalisation_gap.png", dpi=200); plt.close()
 
 rep["runtime_seconds"] = round(time.time()-t0, 1)
 json.dump(rep, open(f"{OUT}/revision2_summary.json","w"), indent=2)

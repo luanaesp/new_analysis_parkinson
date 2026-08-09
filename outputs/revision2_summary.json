@@ -253,5 +253,87 @@
     "delta": -0.0199,
     "note": "Leave-one-laboratory-out transfer on the three features shared by all four cohorts, with and without the 2013 Istanbul cohort in the training set. This is the robustness check the manuscript promised."
   },
-  "runtime_seconds": 144.5
+  "batch_neutral_subsets": {
+    "all_19_features": {
+      "n_features": 19,
+      "features": [
+        "jitter_rel",
+        "shimmer_loc",
+        "hnr",
+        "ppe",
+        "rpde",
+        "gne",
+        "mfcc0",
+        "mfcc1",
+        "mfcc2",
+        "mfcc3",
+        "mfcc4",
+        "mfcc5",
+        "mfcc6",
+        "mfcc7",
+        "mfcc8",
+        "mfcc9",
+        "mfcc10",
+        "mfcc11",
+        "mfcc12"
+      ],
+      "within_cohort_auc": 0.7793,
+      "external_auc": 0.65,
+      "external_ci95": [
+        0.56,
+        0.738
+      ]
+    },
+    "batch_neutral_strict (lab AUC < PD AUC)": {
+      "n_features": 5,
+      "features": [
+        "hnr",
+        "mfcc5",
+        "shimmer_loc",
+        "mfcc2",
+        "mfcc3"
+      ],
+      "within_cohort_auc": 0.7507,
+      "external_auc": 0.6851,
+      "external_ci95": [
+        0.593,
+        0.773
+      ]
+    },
+    "batch_neutral_threshold (lab AUC < 0.70)": {
+      "n_features": 7,
+      "features": [
+        "hnr",
+        "mfcc6",
+        "mfcc4",
+        "mfcc5",
+        "shimmer_loc",
+        "mfcc2",
+        "mfcc3"
+      ],
+      "within_cohort_auc": 0.7693,
+      "external_auc": 0.6052,
+      "external_ci95": [
+        0.511,
+        0.694
+      ]
+    },
+    "batch_driven_only (lab AUC > 0.90)": {
+      "n_features": 4,
+      "features": [
+        "jitter_rel",
+        "mfcc0",
+        "mfcc1",
+        "rpde"
+      ],
+      "within_cohort_auc": 0.7359,
+      "external_auc": 0.5319,
+      "external_ci95": [
+        0.441,
+        0.624
+      ]
+    },
+    "note": "Can cross-laboratory transfer be rescued by discarding the features that carry the strongest laboratory signature? Within-cohort and leave-one-laboratory-out AUC are recomputed on nested feature subsets defined purely by batch discriminability, never by outcome performance, so the comparison is not circular."
+  },
+  "runtime_seconds": 156.0
 }
